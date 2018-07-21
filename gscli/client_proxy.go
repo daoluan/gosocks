@@ -140,8 +140,11 @@ func (c *ClientProxy) GetState() common.ProxyState {
 func (s *ServerProxy) HandleProxy() bool {
 	for {
 		cmd, content, err := common.RecvPrivPacket(s.dst_conn)
-		if err != nil || cmd != 2 {
-			log.Printf("error in RecvPrivPacket: %s|cmd=%d", err.Error(), cmd)
+		if err != nil {
+			log.Printf("error in RecvPrivPacket: %s", err.Error())
+			return false
+		} else if cmd != 2 {
+			log.Printf("unknown cmd=%s", cmd)
 			return false
 		}
 

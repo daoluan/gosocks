@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	CONN_HOST         = "127.0.0.1"
-	CONN_PORT         = "5556"
-	CONN_TYPE         = "tcp4"
-	PROXY_SERVER_HOST = "127.0.0.1"
-	// PROXY_SERVER_HOST = "47.75.123.130"
+	CONN_HOST = "127.0.0.1"
+	CONN_PORT = "5556"
+	CONN_TYPE = "tcp4"
+	// PROXY_SERVER_HOST = "127.0.0.1"
+	PROXY_SERVER_HOST = "47.75.123.130"
 	PROXY_SERVER_PORT = "8080"
 )
 

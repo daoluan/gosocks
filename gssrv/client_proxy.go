@@ -21,8 +21,11 @@ func (c *ClientProxy) Init(src_conn net.Conn) {
 
 func (c *ClientProxy) HandleAuth() bool {
 	cmd, content, err := common.RecvPrivPacket(c.src_conn)
-	if err != nil || cmd != 1 {
+	if err != nil {
 		log.Printf("error in RecvPrivPacket: %s", err.Error())
+		return false
+	} else if cmd != 1 {
+		log.Printf("unknown cmd=%s", cmd)
 		return false
 	}
 
@@ -58,8 +61,11 @@ func (c *ClientProxy) HandleProxy() bool {
 	for {
 		cmd, content, err := common.RecvPrivPacket(c.src_conn)
 
-		if err != nil || cmd != 2 {
-			log.Printf("error in RecvPrivPacket: %s|cmd=%d", err.Error(), cmd)
+		if err != nil {
+			log.Printf("error in RecvPrivPacket: %s", err.Error())
+			return false
+		} else if cmd != 2 {
+			log.Printf("unknown cmd=%s", cmd)
 			return false
 		}
 
