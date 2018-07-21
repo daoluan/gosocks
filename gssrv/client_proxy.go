@@ -10,112 +10,74 @@ import (
 type ClientProxy struct {
 	src_conn net.Conn
 	dst_conn net.Conn
-	reqbuf   []byte
-	reqlen   int
-	state    int8
+	state    common.ProxyState
 }
 
 func (c *ClientProxy) Init(src_conn net.Conn) {
 	c.src_conn = src_conn
 	c.dst_conn = nil
-	c.reqlen = 0
-	c.state = -1
-	c.reqbuf = make([]byte, 100000)
-}
-
-func (c *ClientProxy) Feed() bool {
-	if c.src_conn == nil {
-		log.Println("srconn nil")
-		return false
-	}
-
-	log.Println("reading from localproxy c.reqlen", c.reqlen, len(c.reqbuf))
-	reqlen, err := c.src_conn.Read(c.reqbuf[c.reqlen:])
-	log.Println("read from localproxy reqlen", reqlen, len(c.reqbuf))
-	if err != nil {
-		log.Println("haha error", err.Error())
-		return false
-	}
-
-	// fix c.reqlen
-	c.reqlen = c.reqlen + reqlen
-	return true
+	c.state = common.STATE_NONE
 }
 
 func (c *ClientProxy) HandleAuth() bool {
-	_, content, _, err := common.UnpackPacket(c.reqbuf[:c.reqlen])
+	cmd, content, err := common.RecvPrivPacket(c.src_conn)
+	if err != nil || cmd != 1 {
+		log.Printf("error in RecvPrivPacket: %s", err.Error())
+		return false
+	}
+
+	log.Printf("recv %d in HandleAuth", len(content))
+
 	encrpt, _ := common.DecryptDES(content)
 	domain := string(encrpt)
-	log.Println(domain)
+	log.Printf("domain=%s", domain)
+
 	tcp_addr, err := net.ResolveTCPAddr("tcp4", domain)
 	if err != nil {
-		log.Println(domain, "ResolveTCPAddr error: ", err.Error(), c.reqlen)
+		log.Printf("domain=%s|error in ResolveTCPAddr: %s", domain, err.Error())
 		return false
 	}
 
 	c.dst_conn, err = net.DialTCP("tcp4", nil, tcp_addr)
 	if err != nil {
-		log.Println(domain, "DialTcp error: ", err.Error(), c.reqlen)
+		log.Printf("domain=%s|error in DialTCP: %s", domain, err.Error())
 		c.dst_conn = nil
 		return false
 	}
+
 	// inorder to notify succeed connect dst server
 	c.src_conn.Write([]byte{9})
 
 	// handle proxy to client
-	log.Println("proxy request")
-	c.state = 1
-	c.reqlen = 0
+	c.state = common.STATE_PROXY
 	return true
 }
 
 func (c *ClientProxy) HandleProxy() bool {
+	log.Println("HandleProxy")
 	for {
-		cmd, content, left, err := common.UnpackPacket(c.reqbuf[:c.reqlen])
+		cmd, content, err := common.RecvPrivPacket(c.src_conn)
 
 		if err != nil || cmd != 2 {
-			if err != nil {
-				log.Println("unpack packet error: ringbuf_len = ", c.reqlen,
-					", content len = [", c.reqbuf[1:5], "]",
-					", cmd = ", c.reqbuf[0:2],
-					", reqlen = ", c.reqlen)
-			} else if cmd != 2 {
-				log.Println("error pkg, cmd: ", cmd, "error: ", err)
-			}
-
-			if err != nil && cmd == 0 {
-				return true
-			}
+			log.Printf("error in RecvPrivPacket: %s|cmd=%d", err.Error(), cmd)
 			return false
 		}
 
-		c.reqbuf = make([]byte, 100000)
-		copy(c.reqbuf[0:], left)
-		c.reqlen = len(left)
-
 		// handle the complete package
 		plaintext, _ := common.DecryptDES(content)
+		log.Println("yindan", content[0:10])
 		c.dst_conn.Write(plaintext)
-		log.Println("<<< write plaintext to webserver len(plaintext)=", len(plaintext), "reqlen=", c.reqlen,
-			len(c.reqbuf))
-
-		if c.reqlen == 0 {
-			break
-		}
-		// if cmd == 2 && c.reqlen > 0 {
-		// 	continue
-		// }
-		// break
+		log.Printf("<<< write plaintext to webserver len(plaintext)=%d|len(ciphertext)=%d", len(plaintext), len(content))
 	}
 	return true
 }
 
-func (c *ClientProxy) GetState() int8 {
+func (c *ClientProxy) GetState() common.ProxyState {
 	return c.state
 }
 
 func (c *ClientProxy) Fini() {
-	log.Println("fini")
+	log.Println("ClientProxy fini")
 	if c.src_conn != nil {
 		c.src_conn.Close()
 	}
@@ -124,29 +86,24 @@ func (c *ClientProxy) Fini() {
 	}
 }
 
-func doProxyRequest(src_conn net.Conn, dst_conn net.Conn) {
+func doProxyRequest(src_conn net.Conn, dst_conn net.Conn) bool {
+	log.Println("doProxyRequest >>>>>>>>>>>>>>>>>>>>>")
 	defer src_conn.Close()
 	defer dst_conn.Close()
 
 	for {
-		buf := make([]byte, 151200)
-		log.Println("reading from webserver")
+		// 100k at most
+		buf := make([]byte, 100000)
 		reqlen, err := dst_conn.Read(buf[0:])
-		log.Println("read from webserver read return", "reqlen=", reqlen)
-		if err != nil {
-			log.Println("read from webserver error: ", err.Error())
-			break
-		}
-		if reqlen == 0 {
-			break
+		if err != nil || reqlen == 0 {
+			log.Printf("read from webserver error: %s", err.Error())
+			return false
 		}
 
-		log.Println("yindan ", buf[0:10])
+		// log.Println("yindan ", buf[0:10])
 		ciphertext, _ := common.EncrptDES(buf[:reqlen])
-		sendbuf := common.PackPacket(2, ciphertext)
-		log.Println(">>> recv len = ", reqlen,
-			", send to client: ", len(sendbuf),
-			", encrpt content len = ", len(ciphertext))
-		src_conn.Write(sendbuf)
+
+		common.SendPrivPacket(src_conn, 2, ciphertext)
+		log.Printf(">>> send %d to local proxy", len(ciphertext))
 	}
 }

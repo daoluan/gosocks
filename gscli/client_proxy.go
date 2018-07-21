@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -10,125 +11,116 @@ import (
 )
 
 type ClientProxy struct {
-	state    int8
-	reqbuf   [100000]byte
-	reqlen   int
+	state    common.ProxyState
 	src_conn net.Conn
 	dst_conn net.Conn
 }
 
 func (c *ClientProxy) Init() {
-	log.Println("init")
-	c.state = -1
-	c.reqlen = 0
+	log.Println("client proxy init")
+	c.state = common.STATE_NONE
 	c.src_conn = nil
 	c.dst_conn = nil
 }
-
-func (c *ClientProxy) Feed() bool {
-	if c.src_conn == nil {
-		return false
-	}
-
-	var err error = nil
-	log.Println("reading from browser c.reqlen=", c.reqlen, len(c.reqbuf))
-	c.reqlen, err = c.src_conn.Read(c.reqbuf[c.reqlen:])
-	log.Println("read from browser reqlen=", c.reqlen)
-	if err != nil {
-		log.Println("haha error: ", err.Error())
-		return false
-	}
-
-	if 0 == c.reqlen {
-		return false
-	}
-
-	return true
-}
-
 func (c *ClientProxy) HandleAuth() bool {
-	if c.state > 0 {
+	if c.state > common.STATE_NONE {
+		log.Println("unknown state in auth")
 		return false
 	}
 
-	rsp := make([]byte, 2)
+	buf := make([]byte, 3)
+	n, err := io.ReadFull(c.src_conn, buf)
+	if err != nil {
+		log.Printf("error in ReadFull: %s", err.Error())
+		return false
+	}
+
+	log.Printf("HandleAuth recvlen=%d %s", n, buf)
+
+	// no pwd
+	rsp := []byte{0, 0}
 	rsp[0] = 0x5
 	rsp[1] = 0
 	c.src_conn.Write(rsp)
-	c.state = 0
-	c.reqlen = 0
+	c.state = common.STATE_AUTH
 	return true
 }
 
 func (c *ClientProxy) HandleConnect() bool {
-	conn_rsp := make([]byte, c.reqlen)
+	reqbuf := make([]byte, 256)
+	reqlen, err := c.src_conn.Read(reqbuf)
+	if err != nil {
+		log.Printf("error in Read: %s", err.Error())
+		return false
+	}
+	log.Printf("HandleConnect recvlen=%d", reqlen)
+	conn_rsp := make([]byte, reqlen)
+
 	conn_rsp[0] = 0x5
 	conn_rsp[1] = 0 // succeeded
 	conn_rsp[2] = 0
-	conn_rsp[3] = c.reqbuf[3]
-	for i := 4; i < c.reqlen; i++ {
-		conn_rsp[i] = c.reqbuf[i]
+	conn_rsp[3] = reqbuf[3]
+	for i := 4; i < reqlen; i++ {
+		conn_rsp[i] = reqbuf[i]
 	}
 
 	byte_domain_idx := 0
-	byte_domain := make([]byte, 15000)
-	for i := 5; i < c.reqlen-2; i++ {
-		byte_domain[byte_domain_idx] = c.reqbuf[i]
+	byte_domain := make([]byte, 256)
+	for i := 5; i < reqlen-2; i++ {
+		byte_domain[byte_domain_idx] = reqbuf[i]
 		byte_domain_idx++
 	}
 	byte_domain[byte_domain_idx] = ':'
 	byte_domain_idx++
-	log.Println("handle domain only", string(byte_domain[:byte_domain_idx]))
 
-	port_uint16 := binary.BigEndian.Uint16(c.reqbuf[c.reqlen-2 : c.reqlen])
+	port_uint16 := binary.BigEndian.Uint16(reqbuf[reqlen-2 : reqlen])
 	port_string := strconv.Itoa(int(port_uint16))
 	for i := 0; i < len(port_string); i++ {
 		byte_domain[byte_domain_idx] = port_string[i]
 		byte_domain_idx++
 	}
-	log.Println("handle domain", string(byte_domain[:byte_domain_idx]))
+	log.Printf("domain=%s", string(byte_domain[:byte_domain_idx]))
 
 	ciphertext, _ := common.EncrptDES(byte_domain[:byte_domain_idx])
-	conn_req := common.PackPacket(1, ciphertext)
-	if conn_req == nil {
-		log.Println("pack error")
-		return false
-	}
 
-	var err error = nil
-	log.Println("connecting")
 	c.dst_conn, err = net.Dial("tcp4", PROXY_SERVER_HOST+":"+PROXY_SERVER_PORT)
-	log.Println("connected")
 	if err != nil {
-		log.Println("net Dial error: ", err.Error())
+		log.Printf("net Dial error: %s", err.Error())
 		return false
 	}
 
-	c.dst_conn.Write(conn_req)
-	c.reqlen, err = c.dst_conn.Read(c.reqbuf[0:1]) // skip it
-	if err != nil {
-		log.Println("auth proxy failed: ", err.Error())
+	bres := common.SendPrivPacket(c.dst_conn, 1, ciphertext)
+	if !bres {
+		log.Printf("error in SendPrivPacket: %s", err.Error())
 		return false
 	}
-	c.reqlen = 0
+
+	reqlen, err = c.dst_conn.Read(reqbuf[0:1]) // skip it
+	if err != nil {
+		log.Printf("auth proxy failed: %s", err.Error())
+		return false
+	}
+
 	c.src_conn.Write(conn_rsp)
 
-	c.state = 1
-
+	c.state = common.STATE_PROXY
 	return true
 }
 
-func (c *ClientProxy) HandleProxy() {
-	encrypt, _ := common.EncrptDES(c.reqbuf[:c.reqlen])
-	sendbuf := common.PackPacket(2, encrypt)
+func (c *ClientProxy) HandleProxy() bool {
+	// 100k at most
+	reqbuf := make([]byte, 100000)
+	reqlen, err := c.src_conn.Read(reqbuf[0:])
+	if err != nil {
+		log.Printf("error in Read: %s", err.Error())
+		return false
+	}
+	ciphertext, _ := common.EncrptDES(reqbuf[:reqlen])
 
-	log.Println(
-		"<<< write to remote proxy reqlen = ", c.reqlen,
-		"client to proxy:", len(sendbuf),
-		" reqlen: ", c.reqlen)
-
-	c.reqlen = 0
-	c.dst_conn.Write(sendbuf)
+	log.Printf("<<< write to remote proxy = %d", len(ciphertext))
+	log.Println("yindan", ciphertext[0:10])
+	common.SendPrivPacket(c.dst_conn, 2, ciphertext)
+	return true
 }
 
 func (c *ClientProxy) Fini() {
@@ -141,43 +133,24 @@ func (c *ClientProxy) Fini() {
 	}
 }
 
-func (c *ClientProxy) GetState() int8 {
+func (c *ClientProxy) GetState() common.ProxyState {
 	return c.state
 }
 
 func (s *ServerProxy) HandleProxy() bool {
 	for {
-
-		if !s.Feed() {
+		cmd, content, err := common.RecvPrivPacket(s.dst_conn)
+		if err != nil || cmd != 2 {
+			log.Printf("error in RecvPrivPacket: %s|cmd=%d", err.Error(), cmd)
 			return false
 		}
 
-		for {
-			// log.Println((s.reqbuf[:s.reqlen]))
-			cmd, content, err := s.Extract()
-			if cmd == 0 {
-				log.Println("not enougn")
-				break
-			}
-
-			if err != nil {
-				return false
-			}
-
-			encrpt, _ := common.DecryptDES(content)
-			// log.Println("deccontent=",encrpt,len(encrpt))
-			log.Println(">>> write to browser", len(encrpt), "reqlen=", s.reqlen, "content.len=",
-				len(content))
-			log.Println("yindan ", encrpt[0:10])
-			s.src_conn.Write(encrpt)
-
-			if s.reqlen == 0 {
-				break
-			}
-
-			// if cmd == 2 && s.reqlen > 0 {
-			// 	continue
-			// }
-		}
+		plaintext, _ := common.DecryptDES(content)
+		log.Println(">>> write to browser", len(plaintext), "reqlen=", s.reqlen, "content.len=",
+			len(content))
+		// log.Println("yindan ", plaintext[0:10])
+		s.src_conn.Write(plaintext)
 	}
+
+	return true
 }

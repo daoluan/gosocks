@@ -46,19 +46,15 @@ func handleRequest(src_conn net.Conn) {
 
 	for {
 		log.Println("state", cp.state)
-		if !cp.Feed() {
-			log.Println("feed error")
-			break
-		}
 
-		if cp.GetState() < 0 {
+		if cp.GetState() == common.STATE_NONE {
 			if !cp.HandleAuth() {
 				log.Println("auth error")
 
 				break
 			}
 			go doProxyRequest(cp.src_conn, cp.dst_conn)
-		} else if cp.GetState() > 0 {
+		} else if cp.GetState() == common.STATE_PROXY {
 			if !cp.HandleProxy() {
 				log.Println("HandleProxy error")
 				break

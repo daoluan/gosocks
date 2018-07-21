@@ -3,36 +3,45 @@ package common
 import (
 	"encoding/binary"
 	"errors"
+	"io"
+	"log"
 )
 
-func PackPacket(cmd int8, encrpt []byte) []byte {
-	out := make([]byte, 1024)
-	idx := 0
-	out[idx] = byte(cmd)
-	idx++
-	encrpt_len := uint32(len(encrpt))
-	l := make([]byte, 4)
-	binary.BigEndian.PutUint32(l, encrpt_len)
-	out = append(out[:idx], l...)
-	idx += 4
-	out = append(out[:idx], encrpt...)
-	idx += len(encrpt)
-	return out[:idx]
+func SendPrivPacket(w io.Writer, cmd int8, content []byte) bool {
+	var len uint32 = uint32(len(content))
+	log.Printf("SendPrivPacket cmd=%d|len=%d", cmd, len)
+
+	err := binary.Write(w, binary.BigEndian, cmd)
+	if err != nil {
+		log.Printf("error in Write: %s", err.Error())
+		return false
+	}
+	err = binary.Write(w, binary.BigEndian, &len)
+	if err != nil {
+		log.Printf("error in Write: %s", err.Error())
+		return false
+	}
+	w.Write(content)
+	return true
 }
 
-func UnpackPacket(encrpt []byte) (int8, []byte, []byte, error) {
-	if len(encrpt) < 5 {
-		return 0, nil, nil, errors.New("length error")
+func RecvPrivPacket(r io.Reader) (int8, []byte, error) {
+	var cmd int8 = 0
+	var l uint32 = 0
+	err := binary.Read(r, binary.BigEndian, &cmd)
+	if err != nil {
+		log.Printf("error in Read: %s", err.Error())
+		return 0, nil, errors.New("error in Read")
 	}
-	c := int8(encrpt[0])
-	real_pkg_len := binary.BigEndian.Uint32(encrpt[1:5])
-	left := make([]byte, 1)
-	if int(real_pkg_len+5) == len(encrpt) {
-		left = nil
-	} else if int(real_pkg_len+5) < len(encrpt) {
-		left = encrpt[5+real_pkg_len:]
-	} else {
-		return 0, nil, nil, errors.New("length error")
+	err = binary.Read(r, binary.BigEndian, &l)
+	if err != nil {
+		log.Printf("error in Read: %s", err.Error())
+		return 0, nil, errors.New("error in Read")
 	}
-	return c, encrpt[5 : 5+real_pkg_len], left, nil
+
+	log.Printf("RecvPrivPacket cmd=%d|len=%d", cmd, l)
+
+	content := make([]byte, l)
+	io.ReadFull(r, content)
+	return cmd, content, nil
 }

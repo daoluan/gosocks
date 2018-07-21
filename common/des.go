@@ -8,8 +8,10 @@ import (
 	"io"
 )
 
+var key = "AES256Key-32Characters1234567890"
+
 func EncrptDES(text []byte) ([]byte, error) {
-	key := []byte("AES256Key-32Characters1234567890")
+	key := []byte(key)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -25,7 +27,7 @@ func EncrptDES(text []byte) ([]byte, error) {
 }
 
 func DecryptDES(text []byte) ([]byte, error) {
-	key := []byte("AES256Key-32Characters1234567890")
+	key := []byte(key)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

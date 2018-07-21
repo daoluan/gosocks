@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	CONN_HOST = "127.0.0.1"
-	CONN_PORT = "5556"
-	CONN_TYPE = "tcp4"
-	// PROXY_SERVER_HOST = "127.0.0.1"
-	PROXY_SERVER_HOST = "47.75.123.130"
+	CONN_HOST         = "127.0.0.1"
+	CONN_PORT         = "5556"
+	CONN_TYPE         = "tcp4"
+	PROXY_SERVER_HOST = "127.0.0.1"
+	// PROXY_SERVER_HOST = "47.75.123.130"
 	PROXY_SERVER_PORT = "8080"
 )
 
@@ -51,26 +51,23 @@ func HandleNewRequest(src_conn net.Conn) {
 	defer cp.Fini()
 
 	for {
-		if !cp.Feed() {
-			break
-		}
-
-		log.Println("feeded")
-
-		if cp.GetState() < 0 {
+		if cp.GetState() == common.STATE_NONE {
 			if !cp.HandleAuth() {
 				log.Println("auth erorr")
 				break
 			}
-		} else if cp.GetState() == 0 {
+		} else if cp.GetState() == common.STATE_AUTH {
 			if !cp.HandleConnect() {
 				log.Println("connect erorr")
 				break
 			}
 
 			go ProxyResponse(cp.src_conn, cp.dst_conn)
-		} else if cp.GetState() > 0 {
-			cp.HandleProxy()
+		} else if cp.GetState() == common.STATE_PROXY {
+			if !cp.HandleProxy() {
+				log.Printf("error in HandleProxy")
+				break
+			}
 		}
 	}
 	log.Println("over")
