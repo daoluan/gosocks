@@ -2,21 +2,23 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
-	"github.com/daoluan/gosocks/common"
+	"log"
 	"net"
 	"strconv"
+
+	"github.com/daoluan/gosocks/common"
 )
 
 type ClientProxy struct {
 	state    int8
-	reqbuf   [1000]byte
+	reqbuf   [100000]byte
 	reqlen   int
 	src_conn net.Conn
 	dst_conn net.Conn
 }
 
 func (c *ClientProxy) Init() {
+	log.Println("init")
 	c.state = -1
 	c.reqlen = 0
 	c.src_conn = nil
@@ -29,8 +31,11 @@ func (c *ClientProxy) Feed() bool {
 	}
 
 	var err error = nil
+	log.Println("reading from browser c.reqlen=", c.reqlen, len(c.reqbuf))
 	c.reqlen, err = c.src_conn.Read(c.reqbuf[c.reqlen:])
+	log.Println("read from browser reqlen=", c.reqlen)
 	if err != nil {
+		log.Println("haha error: ", err.Error())
 		return false
 	}
 
@@ -42,7 +47,7 @@ func (c *ClientProxy) Feed() bool {
 }
 
 func (c *ClientProxy) HandleAuth() bool {
-	if c.state > 0 || c.dst_conn == nil {
+	if c.state > 0 {
 		return false
 	}
 
@@ -51,6 +56,7 @@ func (c *ClientProxy) HandleAuth() bool {
 	rsp[1] = 0
 	c.src_conn.Write(rsp)
 	c.state = 0
+	c.reqlen = 0
 	return true
 }
 
@@ -72,38 +78,40 @@ func (c *ClientProxy) HandleConnect() bool {
 	}
 	byte_domain[byte_domain_idx] = ':'
 	byte_domain_idx++
+	log.Println("handle domain only", string(byte_domain[:byte_domain_idx]))
+
 	port_uint16 := binary.BigEndian.Uint16(c.reqbuf[c.reqlen-2 : c.reqlen])
 	port_string := strconv.Itoa(int(port_uint16))
 	for i := 0; i < len(port_string); i++ {
 		byte_domain[byte_domain_idx] = port_string[i]
 		byte_domain_idx++
 	}
+	log.Println("handle domain", string(byte_domain[:byte_domain_idx]))
 
 	ciphertext, _ := common.EncrptDES(byte_domain[:byte_domain_idx])
 	conn_req := common.PackPacket(1, ciphertext)
 	if conn_req == nil {
-		fmt.Println("pack error")
+		log.Println("pack error")
 		return false
 	}
 
 	var err error = nil
-	c.dst_conn, err = net.Dial("tcp", PROXY_SERVER_HOST+":"+PROXY_SERVER_PORT)
+	log.Println("connecting")
+	c.dst_conn, err = net.Dial("tcp4", PROXY_SERVER_HOST+":"+PROXY_SERVER_PORT)
+	log.Println("connected")
 	if err != nil {
-		fmt.Println("net Dial error: ", err.Error())
+		log.Println("net Dial error: ", err.Error())
 		return false
 	}
 
 	c.dst_conn.Write(conn_req)
-	c.reqlen, err = c.dst_conn.Read(c.reqbuf[0:])
+	c.reqlen, err = c.dst_conn.Read(c.reqbuf[0:1]) // skip it
 	if err != nil {
-		fmt.Println("auth proxy failed: ", err.Error())
+		log.Println("auth proxy failed: ", err.Error())
 		return false
 	}
-
+	c.reqlen = 0
 	c.src_conn.Write(conn_rsp)
-
-	// handle proxy to client
-	go ProxyResponse(c.dst_conn, c.src_conn)
 
 	c.state = 1
 
@@ -114,41 +122,62 @@ func (c *ClientProxy) HandleProxy() {
 	encrypt, _ := common.EncrptDES(c.reqbuf[:c.reqlen])
 	sendbuf := common.PackPacket(2, encrypt)
 
-	fmt.Println(
-		"reqlen = ", c.reqlen,
+	log.Println(
+		"<<< write to remote proxy reqlen = ", c.reqlen,
 		"client to proxy:", len(sendbuf),
 		" reqlen: ", c.reqlen)
 
+	c.reqlen = 0
 	c.dst_conn.Write(sendbuf)
 }
 
 func (c *ClientProxy) Fini() {
-	c.src_conn.Close()
-	c.dst_conn.Close()
+	log.Println("fini")
+	if c.src_conn != nil {
+		c.src_conn.Close()
+	}
+	if c.dst_conn != nil {
+		c.dst_conn.Close()
+	}
 }
 
 func (c *ClientProxy) GetState() int8 {
 	return c.state
 }
 
-func (s *ServerProxy) HandleProxy() {
+func (s *ServerProxy) HandleProxy() bool {
 	for {
+
 		if !s.Feed() {
-			break
+			return false
 		}
 
-		cmd, content, err := s.Extract()
-		if err != nil {
-			break
+		for {
+			// log.Println((s.reqbuf[:s.reqlen]))
+			cmd, content, err := s.Extract()
+			if cmd == 0 {
+				log.Println("not enougn")
+				break
+			}
+
+			if err != nil {
+				return false
+			}
+
+			encrpt, _ := common.DecryptDES(content)
+			// log.Println("deccontent=",encrpt,len(encrpt))
+			log.Println(">>> write to browser", len(encrpt), "reqlen=", s.reqlen, "content.len=",
+				len(content))
+			log.Println("yindan ", encrpt[0:10])
+			s.src_conn.Write(encrpt)
+
+			if s.reqlen == 0 {
+				break
+			}
+
+			// if cmd == 2 && s.reqlen > 0 {
+			// 	continue
+			// }
 		}
-
-		encrpt, _ := common.DecryptDES(content)
-		s.src_conn.Write(encrpt)
-
-		if cmd == 2 && s.reqlen > 0 {
-			continue
-		}
-
-		break
 	}
 }

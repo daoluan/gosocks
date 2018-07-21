@@ -1,35 +1,40 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net"
 	"os"
+
+	"github.com/daoluan/gosocks/common"
 )
 
 const (
-	CONN_HOST         = "127.0.0.1"
-	CONN_PORT         = "5556"
-	CONN_TYPE         = "tcp"
-	PROXY_SERVER_HOST = "127.0.0.1"
-	// PROXY_SERVER_HOST = "52.68.46.171"
-	PROXY_SERVER_PORT = "5557"
+	CONN_HOST = "127.0.0.1"
+	CONN_PORT = "5556"
+	CONN_TYPE = "tcp4"
+	// PROXY_SERVER_HOST = "127.0.0.1"
+	PROXY_SERVER_HOST = "47.75.123.130"
+	PROXY_SERVER_PORT = "8080"
 )
 
 func main() {
+	common.InitLog()
+
+	log.Printf("hello")
 	l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
 	if err != nil {
-		fmt.Println("error listening:", err.Error())
+		log.Println("error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer l.Close()
 
-	fmt.Println("listening on " + CONN_HOST + ":" + CONN_PORT)
+	log.Println("listening on " + CONN_HOST + ":" + CONN_PORT)
 
 	for {
 		// listen for an incoming connection
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
+			log.Println("Error accepting: ", err.Error())
 			os.Exit(1)
 		}
 
@@ -38,8 +43,11 @@ func main() {
 }
 
 func HandleNewRequest(src_conn net.Conn) {
+	log.Println("new request")
 	var cp ClientProxy
 	cp.Init()
+	cp.src_conn = src_conn
+
 	defer cp.Fini()
 
 	for {
@@ -47,12 +55,16 @@ func HandleNewRequest(src_conn net.Conn) {
 			break
 		}
 
+		log.Println("feeded")
+
 		if cp.GetState() < 0 {
 			if !cp.HandleAuth() {
+				log.Println("auth erorr")
 				break
 			}
 		} else if cp.GetState() == 0 {
 			if !cp.HandleConnect() {
+				log.Println("connect erorr")
 				break
 			}
 
@@ -61,6 +73,7 @@ func HandleNewRequest(src_conn net.Conn) {
 			cp.HandleProxy()
 		}
 	}
+	log.Println("over")
 }
 
 func ProxyResponse(src_conn net.Conn, dst_conn net.Conn) {
@@ -70,5 +83,7 @@ func ProxyResponse(src_conn net.Conn, dst_conn net.Conn) {
 	}
 	defer sp.Fini()
 
-	sp.HandleProxy()
+	if !sp.HandleProxy() {
+		log.Println("ProxyResponse error")
+	}
 }
