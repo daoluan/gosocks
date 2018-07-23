@@ -71,7 +71,6 @@ func (c *ClientProxy) HandleProxy() bool {
 
 		// handle the complete package
 		plaintext, _ := common.DecryptDES(content)
-		log.Println("yindan", content[0:10])
 		c.dst_conn.Write(plaintext)
 		log.Printf("<<< write plaintext to webserver len(plaintext)=%d|len(ciphertext)=%d", len(plaintext), len(content))
 	}

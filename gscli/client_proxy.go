@@ -151,7 +151,6 @@ func (s *ServerProxy) HandleProxy() bool {
 		plaintext, _ := common.DecryptDES(content)
 		log.Println(">>> write to browser", len(plaintext), "reqlen=", s.reqlen, "content.len=",
 			len(content))
-		// log.Println("yindan ", plaintext[0:10])
 		s.src_conn.Write(plaintext)
 	}
 
