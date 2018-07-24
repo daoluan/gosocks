@@ -12,15 +12,13 @@ const (
 	CONN_HOST = "127.0.0.1"
 	CONN_PORT = "5556"
 	CONN_TYPE = "tcp4"
-	// PROXY_SERVER_HOST = "127.0.0.1"
-	PROXY_SERVER_HOST = "47.75.123.130"
+	PROXY_SERVER_HOST = "127.0.0.1"
 	PROXY_SERVER_PORT = "8080"
 )
 
 func main() {
 	common.InitLog()
 
-	log.Printf("hello")
 	l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
 	if err != nil {
 		log.Println("error listening:", err.Error())
@@ -43,7 +41,6 @@ func main() {
 }
 
 func HandleNewRequest(src_conn net.Conn) {
-	log.Println("new request")
 	var cp ClientProxy
 	cp.Init()
 	cp.src_conn = src_conn
@@ -62,25 +59,12 @@ func HandleNewRequest(src_conn net.Conn) {
 				break
 			}
 
-			go ProxyResponse(cp.src_conn, cp.dst_conn)
+			go common.ProxyPrivPacket(cp.dst_conn, cp.src_conn)
 		} else if cp.GetState() == common.STATE_PROXY {
-			if !cp.HandleProxy() {
-				log.Printf("error in HandleProxy")
+			if !common.ProxyRsPacket(cp.src_conn, cp.dst_conn) {
+				log.Printf("ProxyRsPacket error")
 				break
 			}
 		}
-	}
-	log.Println("over")
-}
-
-func ProxyResponse(src_conn net.Conn, dst_conn net.Conn) {
-	var sp ServerProxy
-	if !sp.Init(src_conn, dst_conn) {
-		return
-	}
-	defer sp.Fini()
-
-	if !sp.HandleProxy() {
-		log.Println("ProxyResponse error")
 	}
 }

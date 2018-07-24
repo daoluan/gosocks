@@ -34,29 +34,26 @@ func main() {
 			os.Exit(1)
 		}
 
-		go handleRequest(conn)
+		go handleNewRequest(conn)
 	}
 }
 
-func handleRequest(src_conn net.Conn) {
-	log.Println("new request")
+func handleNewRequest(src_conn net.Conn) {
 	var cp ClientProxy
 	cp.Init(src_conn)
 	defer cp.Fini()
 
 	for {
-		log.Println("state", cp.state)
-
 		if cp.GetState() == common.STATE_NONE {
 			if !cp.HandleAuth() {
 				log.Println("auth error")
 
 				break
 			}
-			go doProxyRequest(cp.src_conn, cp.dst_conn)
+			go common.ProxyPrivPacket(cp.src_conn, cp.dst_conn)
 		} else if cp.GetState() == common.STATE_PROXY {
-			if !cp.HandleProxy() {
-				log.Println("HandleProxy error")
+			if !common.ProxyRsPacket(cp.dst_conn, cp.src_conn) {
+				log.Println("ProxyRsPacket error")
 				break
 			}
 		}

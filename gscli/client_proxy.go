@@ -17,7 +17,6 @@ type ClientProxy struct {
 }
 
 func (c *ClientProxy) Init() {
-	log.Println("client proxy init")
 	c.state = common.STATE_NONE
 	c.src_conn = nil
 	c.dst_conn = nil
@@ -107,24 +106,7 @@ func (c *ClientProxy) HandleConnect() bool {
 	return true
 }
 
-func (c *ClientProxy) HandleProxy() bool {
-	// 100k at most
-	reqbuf := make([]byte, 100000)
-	reqlen, err := c.src_conn.Read(reqbuf[0:])
-	if err != nil {
-		log.Printf("error in Read: %s", err.Error())
-		return false
-	}
-	ciphertext, _ := common.EncrptDES(reqbuf[:reqlen])
-
-	log.Printf("<<< write to remote proxy = %d", len(ciphertext))
-	log.Println("yindan", ciphertext[0:10])
-	common.SendPrivPacket(c.dst_conn, 2, ciphertext)
-	return true
-}
-
 func (c *ClientProxy) Fini() {
-	log.Println("fini")
 	if c.src_conn != nil {
 		c.src_conn.Close()
 	}
@@ -135,25 +117,4 @@ func (c *ClientProxy) Fini() {
 
 func (c *ClientProxy) GetState() common.ProxyState {
 	return c.state
-}
-
-func (s *ServerProxy) HandleProxy() bool {
-	for {
-		cmd, content, err := common.RecvPrivPacket(s.dst_conn)
-		if err != nil {
-			log.Printf("error in RecvPrivPacket: %s", err.Error())
-			return false
-		} else if cmd != 2 {
-			log.Printf("unknown cmd=%s", cmd)
-			return false
-		}
-
-		plaintext, _ := common.DecryptDES(content)
-		log.Println(">>> write to browser", len(plaintext), "reqlen=", s.reqlen, "content.len=",
-			len(content))
-		// log.Println("yindan ", plaintext[0:10])
-		s.src_conn.Write(plaintext)
-	}
-
-	return true
 }

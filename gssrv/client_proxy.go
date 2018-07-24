@@ -56,28 +56,6 @@ func (c *ClientProxy) HandleAuth() bool {
 	return true
 }
 
-func (c *ClientProxy) HandleProxy() bool {
-	log.Println("HandleProxy")
-	for {
-		cmd, content, err := common.RecvPrivPacket(c.src_conn)
-
-		if err != nil {
-			log.Printf("error in RecvPrivPacket: %s", err.Error())
-			return false
-		} else if cmd != 2 {
-			log.Printf("unknown cmd=%s", cmd)
-			return false
-		}
-
-		// handle the complete package
-		plaintext, _ := common.DecryptDES(content)
-		log.Println("yindan", content[0:10])
-		c.dst_conn.Write(plaintext)
-		log.Printf("<<< write plaintext to webserver len(plaintext)=%d|len(ciphertext)=%d", len(plaintext), len(content))
-	}
-	return true
-}
-
 func (c *ClientProxy) GetState() common.ProxyState {
 	return c.state
 }
@@ -93,7 +71,6 @@ func (c *ClientProxy) Fini() {
 }
 
 func doProxyRequest(src_conn net.Conn, dst_conn net.Conn) bool {
-	log.Println("doProxyRequest >>>>>>>>>>>>>>>>>>>>>")
 	defer src_conn.Close()
 	defer dst_conn.Close()
 
@@ -106,7 +83,6 @@ func doProxyRequest(src_conn net.Conn, dst_conn net.Conn) bool {
 			return false
 		}
 
-		// log.Println("yindan ", buf[0:10])
 		ciphertext, _ := common.EncrptDES(buf[:reqlen])
 
 		common.SendPrivPacket(src_conn, 2, ciphertext)
