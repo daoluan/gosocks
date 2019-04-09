@@ -1,0 +1,5 @@
+{
+  "ListenHost": "127.0.0.1",
+  "ListenPort": 1084,
+  "ConnType": "tcp4"
+}

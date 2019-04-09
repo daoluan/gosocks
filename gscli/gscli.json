@@ -1,0 +1,7 @@
+{
+  "ListenHost": "127.0.0.1",
+  "ListenPort": 1084,
+  "ConnType": "tcp4",
+  "ProxyServerHost": "127.0.0.1",
+  "ProxyServerPort": 1084
+}

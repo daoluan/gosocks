@@ -82,7 +82,7 @@ func (c *ClientProxy) HandleConnect() bool {
 
 	ciphertext, _ := common.EncrptDES(byte_domain[:byte_domain_idx])
 
-	c.dst_conn, err = net.Dial("tcp4", PROXY_SERVER_HOST+":"+PROXY_SERVER_PORT)
+	c.dst_conn, err = net.Dial("tcp4", config.ProxyServerHost+":"+strconv.Itoa(config.ProxyServerPort))
 	if err != nil {
 		log.Printf("net Dial error: %s", err.Error())
 		return false

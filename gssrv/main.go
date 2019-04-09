@@ -1,30 +1,45 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
+	"strconv"
 
 	"github.com/daoluan/gosocks/common"
 )
 
-const (
-	CONN_HOST = "0.0.0.0"
-	// CONN_HOST = "127.0.0.1"
-	CONN_PORT = "8080"
-	CONN_TYPE = "tcp4"
-)
+type Config struct {
+	ListenHost string `json: "ListenHost"`
+	ListenPort int    `json: "ListenPort"`
+	ConnType   string `json: "ConnType"`
+}
+
+func LoadConfig() (config Config) {
+	file, _ := ioutil.ReadFile("gssrv.json")
+	data := Config{}
+	_ = json.Unmarshal([]byte(file), &data)
+	return data
+}
+
+var config Config
 
 func main() {
 	common.InitLog()
-	l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
+	config = LoadConfig()
+	fmt.Println(config)
+
+	l, err := net.Listen(config.ConnType, config.ListenHost+":"+strconv.Itoa(config.ListenPort))
 	if err != nil {
 		log.Println("error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer l.Close()
 
-	log.Println("listening on " + CONN_HOST + ":" + CONN_PORT)
+	log.Println("listening on " + config.ListenHost + ":" + strconv.Itoa(config.ListenPort))
 
 	for {
 		// listen for an incoming connection
