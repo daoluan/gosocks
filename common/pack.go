@@ -9,7 +9,7 @@ import (
 
 func SendPrivPacket(w io.Writer, cmd int8, content []byte) bool {
 	var len uint32 = uint32(len(content))
-	log.Printf("SendPrivPacket cmd=%d|len=%d", cmd, len)
+	// log.Printf("SendPrivPacket cmd=%d|len=%d", cmd, len)
 
 	err := binary.Write(w, binary.BigEndian, cmd)
 	if err != nil {
@@ -39,7 +39,7 @@ func RecvPrivPacket(r io.Reader) (int8, []byte, error) {
 		return 0, nil, errors.New("error in Read")
 	}
 
-	log.Printf("RecvPrivPacket cmd=%d|len=%d", cmd, l)
+	// log.Printf("RecvPrivPacket cmd=%d|len=%d", cmd, l)
 
 	content := make([]byte, l)
 	io.ReadFull(r, content)

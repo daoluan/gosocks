@@ -29,7 +29,7 @@ func (c *ClientProxy) HandleAuth() bool {
 		return false
 	}
 
-	log.Printf("recv %d in HandleAuth", len(content))
+	// log.Printf("recv %d in HandleAuth", len(content))
 
 	encrpt, _ := common.DecryptDES(content)
 	domain := string(encrpt)
@@ -61,7 +61,7 @@ func (c *ClientProxy) GetState() common.ProxyState {
 }
 
 func (c *ClientProxy) Fini() {
-	log.Println("ClientProxy fini")
+	// log.Println("ClientProxy fini")
 	if c.src_conn != nil {
 		c.src_conn.Close()
 	}
@@ -86,6 +86,6 @@ func doProxyRequest(src_conn net.Conn, dst_conn net.Conn) bool {
 		ciphertext, _ := common.EncrptDES(buf[:reqlen])
 
 		common.SendPrivPacket(src_conn, 2, ciphertext)
-		log.Printf(">>> send %d to local proxy", len(ciphertext))
+		// log.Printf(">>> send %d to local proxy", len(ciphertext))
 	}
 }

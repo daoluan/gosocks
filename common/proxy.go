@@ -15,7 +15,7 @@ func ProxyRsPacket(src_conn net.Conn, dst_conn net.Conn) bool {
 	}
 	ciphertext, _ := EncrptDES(reqbuf[:reqlen])
 
-	log.Printf("<<< write to remote proxy = %d", len(ciphertext))
+	// log.Printf("<<< write to remote proxy = %d", len(ciphertext))
 	SendPrivPacket(dst_conn, 2, ciphertext)
 	return true
 }
@@ -35,7 +35,7 @@ func ProxyPrivPacket(src_conn net.Conn, dst_conn net.Conn) {
 		}
 
 		plaintext, _ := DecryptDES(content)
-		log.Println(">>> write to browser", len(plaintext), len(content))
+		// log.Println(">>> write to browser", len(plaintext), len(content))
 		dst_conn.Write(plaintext)
 	}
 }
