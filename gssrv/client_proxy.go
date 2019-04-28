@@ -33,7 +33,7 @@ func (c *ClientProxy) HandleAuth() bool {
 
 	encrpt, _ := common.DecryptDES(content)
 	domain := string(encrpt)
-	log.Printf("domain=%s", domain)
+	log.Printf("connecting domain=%s", domain)
 
 	tcp_addr, err := net.ResolveTCPAddr("tcp4", domain)
 	if err != nil {
